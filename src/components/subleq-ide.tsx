@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef, useEffect } from "react";
+import { useState, useCallback, useRef, useEffect, type ReactNode } from "react";
 import { compile, createVM, resetVM, step, run, formatMemoryDump, demoPrograms } from "@/lib/subleq";
 import type { VMState, CompilationResult } from "@/lib/subleq";
 import { Button } from "@/components/ui/button";
@@ -11,8 +11,22 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  Cpu,
+  Zap,
+  RotateCcw,
+  StepForward,
+  Play,
+  Square,
+  CornerDownLeft,
+  Database,
+  FileCode,
+  Code2,
+  Terminal as TerminalIcon,
+} from "lucide-react";
 
 type ViewMode = "macro" | "pure";
+type MobileTab = "source" | "asm" | "console" | "memory";
 
 const clamp = (value: number, min: number, max: number) => Math.min(Math.max(value, min), max);
 
@@ -42,6 +56,7 @@ export function SubleqIDE() {
   const [leftPanelWidth, setLeftPanelWidth] = useState(300);
   const [rightPanelWidth, setRightPanelWidth] = useState(320);
   const [consolePaneRatio, setConsolePaneRatio] = useState(0.45);
+  const [activeMobileTab, setActiveMobileTab] = useState<MobileTab>("source");
 
   // ---- Compile ----
   const handleCompile = useCallback(() => {
@@ -66,6 +81,7 @@ export function SubleqIDE() {
       setInputText("");
       wasRunningRef.current = false;
       updateMemDump(newVM);
+      setActiveMobileTab("asm");
     } else {
       setVm(null);
       setVmOutput(result.errors.map(e => `[${e.phase}] Line ${e.line}: ${e.message}`).join("\n"));
@@ -115,6 +131,7 @@ export function SubleqIDE() {
 
     setIsRunning(true);
     setVmStatus("running");
+    setActiveMobileTab("console");
 
     // Run in batches for responsiveness
     const batchSize = 5000;
@@ -323,17 +340,17 @@ export function SubleqIDE() {
   return (
     <div className="h-screen flex flex-col bg-background text-foreground overflow-hidden">
       {/* ---- Header ---- */}
-      <header className="flex items-center gap-3 px-4 py-2 border-b border-border bg-card shrink-0">
-        <div className="flex items-center gap-2">
-          <span className="text-sm font-bold tracking-tight">⚙ Subleq Compiler & VM</span>
-          <Badge variant="outline" className="text-[10px] font-normal">32-bit</Badge>
+      <header className="flex items-center gap-2 px-3 py-2 border-b border-border bg-card shrink-0">
+        <div className="flex items-center gap-2 shrink-0">
+          <span className="text-sm font-bold tracking-tight flex items-center gap-1.5"><Cpu size={15} /> Subleq</span>
+          <span className="hidden sm:inline text-sm font-bold tracking-tight">Compiler &amp; VM</span>
         </div>
 
-        <Separator orientation="vertical" className="h-5" />
+        <Separator orientation="vertical" className="h-5 hidden sm:block" />
 
-        {/* Demo selector */}
-        <div className="flex items-center gap-2">
-          <span className="text-[11px] text-muted-foreground uppercase tracking-wider">Source Code</span>
+        {/* Demo selector — desktop only; mobile shows it inside Source tab */}
+        <div className="hidden sm:flex items-center gap-2">
+          <span className="text-[11px] text-muted-foreground uppercase tracking-wider">Source</span>
           <Select value={selectedDemo} onValueChange={handleDemoSelect}>
             <SelectTrigger size="sm" className="w-[140px]">
               <SelectValue />
@@ -351,15 +368,16 @@ export function SubleqIDE() {
         <div className="flex-1" />
 
         {/* Action buttons */}
-        <div className="flex items-center gap-1.5">
+        <div className="flex items-center gap-1">
           <Button size="sm" onClick={handleCompile} className="bg-emerald-600 hover:bg-emerald-700 text-white">
-            <span className="text-xs">◇</span> Compile
+            <Zap size={13} />
+            Compile
           </Button>
-          <Button size="sm" variant="outline" onClick={handleReset} disabled={!compilationResult?.success}>
-            ↻ Reset
+          <Button size="sm" variant="outline" onClick={handleReset} disabled={!compilationResult?.success} title="Reset">
+            <RotateCcw size={13} /> Reset
           </Button>
-          <Button size="sm" variant="outline" onClick={handleStep} disabled={!vm || vm.halted || isRunning}>
-            ▷ Step
+          <Button size="sm" variant="outline" onClick={handleStep} disabled={!vm || vm.halted || isRunning} title="Step">
+            <StepForward size={13} /> Step
           </Button>
           <Button
             size="sm"
@@ -367,13 +385,14 @@ export function SubleqIDE() {
             disabled={!vm || (vm.halted && !isRunning)}
             className={isRunning ? "bg-red-600 hover:bg-red-700 text-white" : "bg-sky-600 hover:bg-sky-700 text-white"}
           >
-            {isRunning ? "■ Stop" : "▶ Run"}
+            {isRunning ? <Square size={13} /> : <Play size={13} />}
+            {isRunning ? "Stop" : "Run"}
           </Button>
         </div>
       </header>
 
-      {/* ---- Main Layout ---- */}
-      <div ref={mainLayoutRef} className="flex-1 flex overflow-hidden">
+      {/* ---- Desktop Layout (md and above) ---- */}
+      <div ref={mainLayoutRef} className="hidden md:flex flex-1 overflow-hidden">
         {/* Left Panel — Source Code Editor */}
         <div style={{ width: leftPanelWidth }} className="flex flex-col border-r border-border shrink-0 min-w-0">
           <div className="px-3 py-1.5 border-b border-border bg-muted/30">
@@ -388,7 +407,6 @@ export function SubleqIDE() {
               placeholder="Enter C-like source code..."
             />
           </div>
-          {/* Errors */}
           {compilationResult && !compilationResult.success && (
             <div className="border-t border-destructive/30 bg-destructive/5 px-3 py-2 max-h-[120px] overflow-y-auto">
               {compilationResult.errors.map((e, i) => (
@@ -475,11 +493,10 @@ export function SubleqIDE() {
             </div>
             <div className="flex-1 overflow-auto bg-zinc-950 p-3">
               <pre className="text-emerald-400 text-[12px] leading-[1.5] whitespace-pre-wrap break-all font-mono">
-                {vmOutput || (vmStatus === "idle" ? "" : "")}
+                {vmOutput || ""}
               </pre>
               <div ref={consoleEndRef} />
             </div>
-            {/* Input line */}
             {vm && !vm.halted && (
               <div className={`flex items-center border-t gap-0 ${waitingForInput ? "border-amber-600/50 bg-amber-950/20" : "border-border bg-zinc-950"}`}>
                 <span className="text-emerald-500 text-[12px] font-mono pl-3 select-none">&gt;</span>
@@ -497,9 +514,9 @@ export function SubleqIDE() {
                 <button
                   onClick={handleSendInput}
                   disabled={!waitingForInput}
-                  className="px-2 py-1.5 text-[10px] text-emerald-500 hover:text-emerald-300 disabled:opacity-20 font-medium"
+                  className="px-2 py-1.5 text-emerald-500 hover:text-emerald-300 disabled:opacity-20"
                 >
-                  ⏎
+                  <CornerDownLeft size={14} />
                 </button>
               </div>
             )}
@@ -522,8 +539,8 @@ export function SubleqIDE() {
           {/* Memory Dump */}
           <div className="flex flex-col flex-1 min-h-0">
             <div className="px-3 py-1.5 border-b border-border bg-muted/30">
-              <span className="text-[10px] uppercase tracking-widest text-muted-foreground font-medium">
-                ⬡ Memory Dump (Hex — 8bit Octets)
+              <span className="text-[10px] uppercase tracking-widest text-muted-foreground font-medium flex items-center gap-1.5">
+                <Database size={11} /> Memory Dump (Hex — 8bit Octets)
               </span>
             </div>
             <div className="flex-1 overflow-auto bg-zinc-950 p-3">
@@ -532,6 +549,195 @@ export function SubleqIDE() {
               </pre>
             </div>
           </div>
+        </div>
+      </div>
+
+      {/* ---- Mobile Layout (below md) ---- */}
+      <div className="flex md:hidden flex-1 flex-col overflow-hidden">
+        {/* Source Tab */}
+        {activeMobileTab === "source" && (
+          <div className="flex-1 flex flex-col overflow-hidden">
+            <div className="px-3 py-2 border-b border-border bg-muted/30 flex items-center gap-2 shrink-0">
+              <span className="text-[10px] uppercase tracking-widest text-muted-foreground font-medium shrink-0">Demo</span>
+              <Select value={selectedDemo} onValueChange={handleDemoSelect}>
+                <SelectTrigger size="sm" className="flex-1 min-w-0">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {demoPrograms.map(d => (
+                    <SelectItem key={d.name} value={d.name}>
+                      {d.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="flex-1 relative">
+              <textarea
+                value={source}
+                onChange={e => setSource(e.target.value)}
+                className="absolute inset-0 w-full h-full bg-transparent resize-none p-3 text-[14px] leading-[1.6] focus:outline-none font-mono text-foreground placeholder:text-muted-foreground"
+                spellCheck={false}
+                placeholder="Enter C-like source code..."
+              />
+            </div>
+            {compilationResult && !compilationResult.success && (
+              <div className="border-t border-destructive/30 bg-destructive/5 px-3 py-2 max-h-[120px] overflow-y-auto shrink-0">
+                {compilationResult.errors.map((e, i) => (
+                  <div key={i} className="text-[11px] text-destructive">
+                    [{e.phase}] L{e.line}:{e.col} — {e.message}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Assembly Tab */}
+        {activeMobileTab === "asm" && (
+          <div className="flex-1 flex flex-col overflow-hidden">
+            <div className="px-3 py-1.5 border-b border-border bg-muted/30 flex items-center gap-3 shrink-0">
+              <span className="text-[10px] uppercase tracking-widest text-muted-foreground font-medium">Assembly</span>
+              <div className="flex items-center gap-0.5 ml-auto">
+                <button
+                  onClick={() => setAsmViewMode("macro")}
+                  className={`px-2 py-0.5 text-[10px] uppercase tracking-wider transition-colors ${
+                    asmViewMode === "macro"
+                      ? "bg-primary text-primary-foreground"
+                      : "text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  Macro IR
+                </button>
+                <button
+                  onClick={() => setAsmViewMode("pure")}
+                  className={`px-2 py-0.5 text-[10px] uppercase tracking-wider transition-colors ${
+                    asmViewMode === "pure"
+                      ? "bg-primary text-primary-foreground"
+                      : "text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  Pure
+                </button>
+              </div>
+            </div>
+            <div className="flex-1 overflow-auto font-mono text-[12px] leading-[1.6]">
+              {compilationResult?.success ? (
+                <pre className="p-3 whitespace-pre">
+                  {asmViewMode === "macro" ? (
+                    <MacroView text={macroText} />
+                  ) : (
+                    <AssemblyView text={assemblyText} pc={pcDisplay} binarySize={binarySize} />
+                  )}
+                </pre>
+              ) : (
+                <div className="p-3 text-muted-foreground text-[12px]">
+                  Compile source code to view assembly output.
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Console Tab */}
+        {activeMobileTab === "console" && (
+          <div className="flex-1 flex flex-col overflow-hidden">
+            <div className="px-3 py-1.5 border-b border-border bg-muted/30 flex items-center shrink-0">
+              <span className="text-[10px] uppercase tracking-widest text-muted-foreground font-medium">I/O Console</span>
+              <div className="ml-auto">
+                <Badge
+                  variant={waitingForInput ? "default" : vmStatus === "halted" ? "secondary" : vmStatus === "error" ? "destructive" : "outline"}
+                  className={`text-[9px] h-4 ${waitingForInput ? "bg-amber-600 text-white animate-pulse" : ""}`}
+                >
+                  {statusText}
+                </Badge>
+              </div>
+            </div>
+            <div className="flex-1 overflow-auto bg-zinc-950 p-3">
+              <pre className="text-emerald-400 text-[14px] leading-[1.5] whitespace-pre-wrap break-all font-mono">
+                {vmOutput || ""}
+              </pre>
+              <div ref={consoleEndRef} />
+            </div>
+            {vm && !vm.halted && (
+              <div className={`flex items-center border-t gap-0 shrink-0 ${waitingForInput ? "border-amber-600/50 bg-amber-950/20" : "border-border bg-zinc-950"}`}>
+                <span className="text-emerald-500 text-[14px] font-mono pl-3 select-none">&gt;</span>
+                <input
+                  ref={inputRef}
+                  type="text"
+                  value={inputText}
+                  onChange={e => setInputText(e.target.value)}
+                  onKeyDown={e => { if (e.key === "Enter") handleSendInput(); }}
+                  disabled={!waitingForInput}
+                  placeholder={waitingForInput ? "Type input and press Enter..." : ""}
+                  className="flex-1 bg-transparent text-emerald-400 text-[14px] font-mono px-2 py-2.5 focus:outline-none placeholder:text-emerald-800 disabled:opacity-30"
+                  spellCheck={false}
+                />
+                <button
+                  onClick={handleSendInput}
+                  disabled={!waitingForInput}
+                  className="px-3 py-2.5 text-emerald-500 hover:text-emerald-300 disabled:opacity-20"
+                >
+                  <CornerDownLeft size={16} />
+                </button>
+              </div>
+            )}
+            {vm && (
+              <div className="px-3 py-1.5 border-t border-border bg-muted/30 flex items-center gap-3 text-[10px] text-muted-foreground shrink-0">
+                <span>Cycles: <span className="text-foreground font-medium">{cycleCount.toLocaleString()}</span></span>
+                <span>PC: <span className="text-foreground font-medium">0x{pcDisplay.toString(16).toUpperCase().padStart(4, "0")}</span></span>
+                <span>Words: <span className="text-foreground font-medium">{binarySize}</span></span>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Memory Tab */}
+        {activeMobileTab === "memory" && (
+          <div className="flex-1 flex flex-col overflow-hidden">
+            <div className="px-3 py-1.5 border-b border-border bg-muted/30 shrink-0">
+              <span className="text-[10px] uppercase tracking-widest text-muted-foreground font-medium flex items-center gap-1.5">
+                <Database size={11} /> Memory Dump (Hex — 8bit Octets)
+              </span>
+            </div>
+            <div className="flex-1 overflow-auto bg-zinc-950 p-3">
+              <pre className="text-zinc-400 text-[11px] leading-[1.5] whitespace-pre font-mono">
+                {memDump || "Compile and run to view memory."}
+              </pre>
+            </div>
+          </div>
+        )}
+
+        {/* ---- Mobile Tab Bar ---- */}
+        <div className="shrink-0 border-t border-border bg-card flex pb-safe">
+          {(["source", "asm", "console", "memory"] as const).map(tab => {
+            const labels: Record<MobileTab, string> = {
+              source: "Source",
+              asm: "Asm",
+              console: "Console",
+              memory: "Memory",
+            };
+            const icons: Record<MobileTab, ReactNode> = {
+              source: <FileCode size={18} />,
+              asm: <Code2 size={18} />,
+              console: <TerminalIcon size={18} />,
+              memory: <Database size={18} />,
+            };
+            return (
+              <button
+                key={tab}
+                onClick={() => setActiveMobileTab(tab)}
+                className={`flex-1 flex flex-col items-center justify-center py-2 gap-0.5 transition-colors ${
+                  activeMobileTab === tab
+                    ? "text-primary bg-primary/10"
+                    : "text-muted-foreground"
+                }`}
+              >
+                <span className="leading-none">{icons[tab]}</span>
+                <span className="text-[10px] uppercase tracking-wide font-medium">{labels[tab]}</span>
+              </button>
+            );
+          })}
         </div>
       </div>
     </div>

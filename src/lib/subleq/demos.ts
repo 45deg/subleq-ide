@@ -232,7 +232,7 @@ while (1) {
 // Remaining input     : stdin for the BF program
 //
 // Example — paste this BF Hello World then press Enter:
-//   +++++++++[>++++++++<-]>.
+//   ++++++++[>++++[>++>+++>+++>+<<<<-]>+>+>->>+[<]<-]>>.>---.+++++++..+++.>>.<-.<.+++.------.--------.>>+.>++.
 
 int prog[512];
 int tape[512];
